@@ -449,11 +449,17 @@ public class SavepointV2Serializer implements SavepointSerializer<SavepointV2> {
 					stateHandle.getStateNameToPartitionOffsets();
 			dos.writeInt(partitionOffsetsMap.size());
 			for (Map.Entry<String, OperatorStateHandle.StateMetaInfo> entry : partitionOffsetsMap.entrySet()) {
-				dos.writeUTF(entry.getKey());
 
+				String stateName = entry.getKey();
 				OperatorStateHandle.StateMetaInfo stateMetaInfo = entry.getValue();
-
 				int mode = stateMetaInfo.getDistributionMode().ordinal();
+
+				// custom patch: forwards compatible by flagging this as union state
+				if ("topic-partition-offset-states".equals(stateName)) {
+					mode = OperatorStateHandle.Mode.BROADCAST.ordinal();
+				}
+
+				dos.writeUTF(stateName);
 				dos.writeByte(mode);
 
 				long[] offsets = stateMetaInfo.getOffsets();
@@ -479,7 +485,7 @@ public class SavepointV2Serializer implements SavepointSerializer<SavepointV2> {
 			int mapSize = dis.readInt();
 			Map<String, OperatorStateHandle.StateMetaInfo> offsetsMap = new HashMap<>(mapSize);
 			for (int i = 0; i < mapSize; ++i) {
-				String key = dis.readUTF();
+				String stateName = dis.readUTF();
 
 				int modeOrdinal = dis.readByte();
 				OperatorStateHandle.Mode mode = OperatorStateHandle.Mode.values()[modeOrdinal];
@@ -489,9 +495,18 @@ public class SavepointV2Serializer implements SavepointSerializer<SavepointV2> {
 					offsets[j] = dis.readLong();
 				}
 
+				// custom patch: backwards compatible by remapping name and/or flagging as partitioned state
+				if ("kafka-consumer-offsets".equals(stateName)) {
+					stateName = "topic-partition-offset-states";
+				}
+
+				if ("topic-partition-offset-states".equals(stateName)) {
+					mode = OperatorStateHandle.Mode.SPLIT_DISTRIBUTE;
+				}
+
 				OperatorStateHandle.StateMetaInfo metaInfo =
 						new OperatorStateHandle.StateMetaInfo(offsets, mode);
-				offsetsMap.put(key, metaInfo);
+				offsetsMap.put(stateName, metaInfo);
 			}
 			StreamStateHandle stateHandle = deserializeStreamStateHandle(dis);
 			return new OperatorStreamStateHandle(offsetsMap, stateHandle);

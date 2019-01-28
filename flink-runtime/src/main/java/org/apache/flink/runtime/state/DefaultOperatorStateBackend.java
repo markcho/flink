@@ -746,11 +746,17 @@ public class DefaultOperatorStateBackend implements OperatorStateBackend {
 						for (Map.Entry<String, PartitionableListState<?>> entry :
 							registeredOperatorStatesDeepCopies.entrySet()) {
 
+							String stateName = entry.getKey();
 							PartitionableListState<?> value = entry.getValue();
 							long[] partitionOffsets = value.write(localOut);
 							OperatorStateHandle.Mode mode = value.getStateMetaInfo().getAssignmentMode();
+
+							// custom patch: we manipulate the mode so that checkpoints are recovered as partitioned state
+							if ("topic-partition-offset-states".equals(stateName)) {
+								mode = OperatorStateHandle.Mode.SPLIT_DISTRIBUTE;
+							}
 							writtenStatesMetaData.put(
-								entry.getKey(),
+								stateName,
 								new OperatorStateHandle.StateMetaInfo(partitionOffsets, mode));
 						}
 
@@ -758,11 +764,17 @@ public class DefaultOperatorStateBackend implements OperatorStateBackend {
 						for (Map.Entry<String, BackendWritableBroadcastState<?, ?>> entry :
 							registeredBroadcastStatesDeepCopies.entrySet()) {
 
+							String stateName = entry.getKey();
 							BackendWritableBroadcastState<?, ?> value = entry.getValue();
 							long[] partitionOffsets = {value.write(localOut)};
 							OperatorStateHandle.Mode mode = value.getStateMetaInfo().getAssignmentMode();
+
+							// custom patch: we manipulate the mode so that checkpoints are recovered as partitioned state
+							if ("topic-partition-offset-states".equals(stateName)) {
+								mode = OperatorStateHandle.Mode.SPLIT_DISTRIBUTE;
+							}
 							writtenStatesMetaData.put(
-								entry.getKey(),
+								stateName,
 								new OperatorStateHandle.StateMetaInfo(partitionOffsets, mode));
 						}
 
