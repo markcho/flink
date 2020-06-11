@@ -101,6 +101,18 @@ public class WebOptions {
 				" under the directory specified by JOB_MANAGER_WEB_TMPDIR_KEY.");
 
 	/**
+	 * The config parameter defining whether to upload the user's job jars to the blob server when submitting a job
+	 * from the web-frontend.
+	 * If the user's job jars are already available in task managers classpath, then this flag can be disabled to
+	 * prevent uploading the same jar to the blob server when the job is submitted from the web-frontend.
+	 */
+	public static final ConfigOption<Boolean> BLOB_SERVER_UPLOAD_ENABLE =
+		key("web.blobserver.upload.enable")
+			.defaultValue(true)
+			.withDescription("Flag indicating whether to upload the user's job jars to the blob server when" +
+				" submitting a job from the web-frontend.");
+
+	/**
 	 * The config parameter defining the number of archived jobs for the JobManager.
 	 */
 	public static final ConfigOption<Integer> ARCHIVE_COUNT =

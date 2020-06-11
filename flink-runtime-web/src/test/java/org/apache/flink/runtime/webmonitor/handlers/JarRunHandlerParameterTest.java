@@ -47,23 +47,27 @@ public class JarRunHandlerParameterTest extends JarHandlerParameterTest<JarRunRe
 	private static final boolean ALLOW_NON_RESTORED_STATE_QUERY = true;
 	private static final String RESTORE_PATH = "/foo/bar";
 
-	private static JarRunHandler handler;
+	protected static JarRunHandler handler;
 
 	@BeforeClass
 	public static void setup() throws Exception {
 		init();
+		handler = createJarRunHandler(new Configuration());
+	}
+
+	public static JarRunHandler createJarRunHandler(Configuration config) {
 		final GatewayRetriever<TestingDispatcherGateway> gatewayRetriever = () -> CompletableFuture.completedFuture(restfulGateway);
 		final Time timeout = Time.seconds(10);
 		final Map<String, String> responseHeaders = Collections.emptyMap();
 		final Executor executor = TestingUtils.defaultExecutor();
 
-		handler = new JarRunHandler(
+		return new JarRunHandler(
 			gatewayRetriever,
 			timeout,
 			responseHeaders,
 			JarRunHeaders.getInstance(),
 			jarDir,
-			new Configuration(),
+			config,
 			executor);
 	}
 
@@ -145,6 +149,7 @@ public class JarRunHandlerParameterTest extends JarHandlerParameterTest<JarRunRe
 		final SavepointRestoreSettings savepointRestoreSettings = jobGraph.getSavepointRestoreSettings();
 		Assert.assertFalse(savepointRestoreSettings.allowNonRestoredState());
 		Assert.assertNull(savepointRestoreSettings.getRestorePath());
+		validateUserJarBlobServerUpload(jobGraph);
 		return jobGraph;
 	}
 
@@ -154,6 +159,11 @@ public class JarRunHandlerParameterTest extends JarHandlerParameterTest<JarRunRe
 		final SavepointRestoreSettings savepointRestoreSettings = jobGraph.getSavepointRestoreSettings();
 		Assert.assertTrue(savepointRestoreSettings.allowNonRestoredState());
 		Assert.assertEquals(RESTORE_PATH, savepointRestoreSettings.getRestorePath());
+		validateUserJarBlobServerUpload(jobGraph);
 		return jobGraph;
+	}
+
+	void validateUserJarBlobServerUpload(JobGraph jobGraph) {
+		Assert.assertEquals(jobGraph.getUserJarBlobKeys().size(), 1);
 	}
 }

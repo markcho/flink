@@ -20,6 +20,7 @@ package org.apache.flink.runtime.webmonitor.handlers;
 
 import org.apache.flink.api.common.time.Time;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.WebOptions;
 import org.apache.flink.runtime.blob.BlobClient;
 import org.apache.flink.runtime.client.ClientUtils;
 import org.apache.flink.runtime.dispatcher.DispatcherGateway;
@@ -83,25 +84,28 @@ public class JarRunHandler extends
 
 		final SavepointRestoreSettings savepointRestoreSettings = getSavepointRestoreSettings(request);
 
-		final CompletableFuture<JobGraph> jobGraphFuture = getJobGraphAsync(context, savepointRestoreSettings);
+		CompletableFuture<JobGraph> jobGraphFuture = getJobGraphAsync(context, savepointRestoreSettings);
 
-		CompletableFuture<Integer> blobServerPortFuture = gateway.getBlobServerPort(timeout);
+		final boolean blobServerUploadEnable = this.configuration.getBoolean(WebOptions.BLOB_SERVER_UPLOAD_ENABLE);
+		if (blobServerUploadEnable) {
+			CompletableFuture<Integer> blobServerPortFuture = gateway.getBlobServerPort(timeout);
 
-		CompletableFuture<JobGraph> jarUploadFuture = jobGraphFuture.thenCombine(blobServerPortFuture, (jobGraph, blobServerPort) -> {
-			final InetSocketAddress address = new InetSocketAddress(gateway.getHostname(), blobServerPort);
-			try {
-				ClientUtils.extractAndUploadJobGraphFiles(jobGraph, () -> new BlobClient(address, configuration));
-			} catch (FlinkException e) {
-				throw new CompletionException(e);
-			}
+			jobGraphFuture = jobGraphFuture.thenCombine(blobServerPortFuture, (jobGraph, blobServerPort) -> {
+				final InetSocketAddress address = new InetSocketAddress(gateway.getHostname(), blobServerPort);
+				try {
+					ClientUtils.extractAndUploadJobGraphFiles(jobGraph, () -> new BlobClient(address, configuration));
+				} catch (FlinkException e) {
+					throw new CompletionException(e);
+				}
 
-			return jobGraph;
-		});
+				return jobGraph;
+			});
+		}
 
-		CompletableFuture<Acknowledge> jobSubmissionFuture = jarUploadFuture.thenCompose(jobGraph -> gateway.submitJob(jobGraph, timeout));
+		CompletableFuture<Acknowledge> jobSubmissionFuture = jobGraphFuture.thenCompose(jobGraph -> gateway.submitJob(jobGraph, timeout));
 
 		return jobSubmissionFuture
-			.thenCombine(jarUploadFuture, (ack, jobGraph) -> new JarRunResponseBody(jobGraph.getJobID()));
+			.thenCombine(jobGraphFuture, (ack, jobGraph) -> new JarRunResponseBody(jobGraph.getJobID()));
 	}
 
 	private SavepointRestoreSettings getSavepointRestoreSettings(
